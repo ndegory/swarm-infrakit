@@ -1,0 +1,10 @@
+infrakit-*/
+instance*.tf.json
+*.tfstate
+*.tfstate.backup
+*.lck
+backup/
+*.pem
+*.log
+logs/
+config/

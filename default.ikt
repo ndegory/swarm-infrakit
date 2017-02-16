@@ -1,0 +1,8 @@
+{{ global "/infrakit/home" "/infrakit" }}
+{{ global "/amp/amplifier/image" "appcelerator/amplifier" }}
+{{ global "/amp/amplifier/version" "latest" }}
+{{ global "/amp/amplifier/replica" "3" }}
+{{ global "/amp/network" "swarmnet" }}
+{{ global "/m1/ip" "192.168.2.200" }}
+{{ global "/m2/ip" "192.168.2.201" }}
+{{ global "/m3/ip" "192.168.2.202" }}
