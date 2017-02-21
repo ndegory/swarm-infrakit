@@ -21,6 +21,9 @@
               "InstanceType": "{{ ref "/aws/instancetype" }}",
               "KeyName": "{{ ref "/aws/keyname" }}",
               "SubnetId": "{{ ref "/aws/subnetid" }}",
+              {{ if ref "/aws/instanceprofile" }}"IamInstanceProfile": {
+                "Name": "{{ ref "/aws/instanceprofile" }}"
+              },{{ end }}
               "SecurityGroupIds": [ "{{ ref "/aws/securitygroupid" }}" ]
             },
             "Tags": {
@@ -40,7 +43,15 @@
                   "InitScriptTemplateURL": "file://{{ ref "/infrakit/home" }}/manager-init.sh",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
-                    "Host" : "tcp://{{ ref "/m1/ip" }}:2375"
+                    {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
+                    "TLS" : {
+                      "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
+                      "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",
+                      "KeyFile": "{{ ref "/docker/remoteapi/keyfile" }}",
+                      "InsecureSkipVerify": false
+                    }
+                    {{ else }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/port" }}"
+                    {{ end }}
                   }
                 }
               }, {
@@ -91,7 +102,15 @@
             "InitScriptTemplateURL": "file://{{ ref "/infrakit/home" }}/worker-init.sh",
             "SwarmJoinIP": "{{ ref "/m1/ip" }}",
             "Docker" : {
-              "Host" : "tcp://{{ ref "/m1/ip" }}:2375"
+              {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
+              "TLS" : {
+                "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
+                "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",
+                "KeyFile": "{{ ref "/docker/remoteapi/keyfile" }}",
+                "InsecureSkipVerify": false
+              }
+              {{ else }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/port" }}"
+              {{ end }}
             }
           }
         }

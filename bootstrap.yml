@@ -43,6 +43,7 @@ Parameters:
     ConstraintDescription: must be an URL
     Description: Base URL for InfraKit configuration. there should be a bootstrap.sh, a variables.ikt and a config.tpl file
     Default: https://raw.githubusercontent.com/ndegory/swarm-infrakit/master
+    AllowedPattern: "https?://[0-9a-z\\.-]+\\.[a-z\\.]{2,6}[/\\w\\.-]*/?"
 
 Resources:
   Vpc:
@@ -235,21 +236,22 @@ Resources:
               packages:
                 - ca-certificates
                 - jq
+                - git
                 - curl
                 - unzip
-                - awscli
               write_files:
                 - path: /infrakit/env.ikt
                   content: |
                     {{/* Global variables */}}
                     {{ global "/aws/region" "${region}" }}
                     {{ global "/aws/stackname" "${stackname}" }}
-                    {{ global "/aws/vpcid" "${vpcid}" }}
-                    {{ global "/aws/subnetid" "${subnetid}" }}
-                    {{ global "/aws/securitygroupid" "${sgid}" }}
+                    {{ global "/aws/vpcid" "${Vpc}" }}
+                    {{ global "/aws/subnetid" "${PublicSubnet1}" }}
+                    {{ global "/aws/securitygroupid" "${SecurityGroup}" }}
                     {{ global "/aws/amiid" "${ami}" }}
-                    {{ global "/aws/instancetype" "${type}" }}
-                    {{ global "/aws/keyname" "${key}" }}
+                    {{ global "/aws/instancetype" "${InstanceType}" }}
+                    {{ global "/aws/instanceprofile" "${InstanceProfile}" }}
+                    {{ global "/aws/keyname" "${KeyName}" }}
               runcmd:
                 - wget -qO- https://get.docker.com/ | sh
                 - usermod -G docker ubuntu
@@ -257,7 +259,7 @@ Resources:
                 - systemctl start docker.service
                 - curl ${InfraKitConfigurationBaseURL}/bootstrap.sh -o /usr/local/bin/bootstrap.sh
                 - bash /usr/local/bin/bootstrap.sh ${InfraKitConfigurationBaseURL}
-            - { ami: !FindInMap [ AMI, !Ref "AWS::Region", Ubuntu ], stackname: !Ref "AWS::StackName", region: !Ref "AWS::Region", vpcid: !Ref Vpc, subnetid: !Ref PublicSubnet1, sgid: !Ref SecurityGroup, type: !Ref InstanceType, key: !Ref KeyName }
+            - { ami: !FindInMap [ AMI, !Ref "AWS::Region", Ubuntu ], stackname: !Ref "AWS::StackName", region: !Ref "AWS::Region" }
 
 Metadata:
   AWS::CloudFormation::Interface:
