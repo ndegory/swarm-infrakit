@@ -22,9 +22,11 @@ Coming soon
 
 ## Deploy
 
-The InfraKit instance will render the ```config.tpl``` template, and watch the resulting file (config.json).
-The result will be the full Swarm cluster.
+The InfraKit instance renders the ```config.tpl``` template, and watches the resulting file (config.json).
+The result is the full Swarm cluster.
 
 ## Security
 
-To be implemented
+The Swarm cluster is by default secured with self managed certificates.
+The manager node remote API is enabled to allow nodes to get the join token, certificates are signed by a CA hosted on the bootstrap instance to enable mutual authentication.
+The certificate management is only for demonstration purpose, not for production.

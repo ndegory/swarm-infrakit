@@ -1,4 +1,11 @@
 {{ global "/infrakit/home" "/infrakit" }}
+{{ global "/docker/remoteapi/port" "2375" }}
+{{ global "/docker/remoteapi/tlsport" "2376" }}
+{{ global "/docker/remoteapi/cafile" "/etc/docker/ca.pem" }}
+{{ global "/docker/remoteapi/certfile" "/etc/docker/client.pem" }}
+{{ global "/docker/remoteapi/keyfile" "/etc/docker/client-key.pem" }}
+{{ global "/docker/remoteapi/srvcertfile" "/etc/docker/server.pem" }}
+{{ global "/docker/remoteapi/srvkeyfile" "/etc/docker/server-key.pem" }}
 {{ global "/amp/amplifier/image" "appcelerator/amplifier" }}
 {{ global "/amp/amplifier/version" "latest" }}
 {{ global "/amp/amplifier/replica" "3" }}
