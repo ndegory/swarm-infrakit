@@ -276,6 +276,7 @@ Resources:
         - Ref: AWS::Region
         - Ubuntu
       InstanceType: !Ref InstanceType
+      PrivateIpAddress: "192.168.2.254"
       KeyName: !Ref KeyName
       Tags:
       - Key: Name
