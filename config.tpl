@@ -4,7 +4,7 @@
   {
     "Plugin": "group",
     "Properties": {
-      "ID": "amp-manager",
+      "ID": "amp-manager-{{ ref "/aws/vpcid" }}",
       "Properties": {
         "Allocation": {
           "LogicalIds": [
@@ -74,7 +74,7 @@
   {
     "Plugin": "group",
     "Properties": {
-      "ID": "amp-worker",
+      "ID": "amp-worker-{{ ref "/aws/vpcid" }}",
       "Properties": {
         "Allocation": {
           "Size": 2
