@@ -1,5 +1,5 @@
 {{ source "default.ikt" }}
-{{ source "env.ikt" }}
+{{ source "file:///infrakit/env.ikt" }}
 [
   {
     "Plugin": "group",
@@ -40,7 +40,7 @@
               {
                 "Plugin": "flavor-swarm/manager",
                 "Properties": {
-                  "InitScriptTemplateURL": "file://{{ ref "/infrakit/home" }}/manager-init.sh",
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.sh",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
                     {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
@@ -102,7 +102,7 @@
         "Flavor": {
           "Plugin": "flavor-swarm/worker",
           "Properties": {
-            "InitScriptTemplateURL": "file://{{ ref "/infrakit/home" }}/worker-init.sh",
+            "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.sh",
             "SwarmJoinIP": "{{ ref "/m1/ip" }}",
             "Docker" : {
               {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",

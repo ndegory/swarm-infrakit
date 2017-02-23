@@ -1,4 +1,4 @@
-{{ global "/infrakit/home" "/infrakit" }}
+{{ global "/script/baseurl" "file:///infrakit" }}
 {{ global "/docker/remoteapi/port" "2375" }}
 {{ global "/docker/remoteapi/tlsport" "2376" }}
 {{ global "/docker/remoteapi/cafile" "/etc/docker/ca.pem" }}
