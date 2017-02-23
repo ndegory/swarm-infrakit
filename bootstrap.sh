@@ -14,19 +14,16 @@ CERTIFICATE_SERVER_IMAGE=ndegory/certauth:latest
 docker pull $INFRAKIT_IMAGE || exit 1
 docker pull $INFRAKIT_AWS_IMAGE || exit 1
 
-# if a remote location is provided, first fetch the sources locally
-# and prepare an InfraKit home dir
+# if a remote location is provided, the configuration will be searched there
 if [ -n "$InfraKitConfigurationBaseURL" ]; then
   LOCAL_CONFIG=$INFRAKIT_HOME
-  mkdir  -p $INFRAKIT_HOME
-  # fetch the sources
-  for f in default.ikt config.tpl manager-init.sh worker-init.sh plugins.json; do
-    echo -n "fetching $f... "
-    curl -Ls ${InfraKitConfigurationBaseURL}/$f -o $LOCAL_CONFIG/$f && echo "done" || echo "failed"
-  done
+  CONFIG_TPL=$InfraKitConfigurationBaseURL/config.tpl
+  PLUGINS_CFG=$InfraKitConfigurationBaseURL/plugins.json
 else
 # or just use the local directory as the source
   LOCAL_CONFIG=$PWD
+  CONFIG_TPL=file://$INFRAKIT_HOME/config.tpl
+  PLUGINS_CFG=file://$INFRAKIT_HOME/plugins.json
 fi
 mkdir -p $LOCAL_CONFIG/logs $LOCAL_CONFIG/plugins $LOCAL_CONFIG/configs || exit 1
 
@@ -79,7 +76,7 @@ if [ $? -ne 0 ]; then
     docker run -d --restart always --name infrakit \
            -v /etc/docker:/etc/docker \
            $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_IMAGE \
-           infrakit plugin start --wait --config-url file://$INFRAKIT_HOME/plugins.json --exec os --log 5 \
+           infrakit plugin start --wait --config-url $PLUGINS_CFG --exec os --log 5 \
            manager group-stateless flavor-swarm flavor-vanilla flavor-combo
            sleep 3
 fi
@@ -98,7 +95,7 @@ fi
 
 echo "prepare the InfraKit configuration file..."
 docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_IMAGE \
-           infrakit template --url file://$INFRAKIT_HOME/config.tpl > $LOCAL_CONFIG/config.json
+           infrakit template --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
 if [ $? -ne 0 ]; then
 	echo "Failed"
 	exit 1

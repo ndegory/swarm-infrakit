@@ -315,6 +315,7 @@ Resources:
                     {{ global "/aws/instancetype" "${InstanceType}" }}
                     {{ global "/aws/instanceprofile" "${ClusterInstanceProfile}" }}
                     {{ global "/aws/keyname" "${KeyName}" }}
+                    {{ global "/script/baseurl" "${InfraKitConfigurationBaseURL}" }}
               runcmd:
                 - wget -qO- https://get.docker.com/ | sh
                 - usermod -G docker ubuntu
