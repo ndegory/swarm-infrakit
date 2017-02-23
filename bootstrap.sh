@@ -47,7 +47,7 @@ if [ ! -d ~/certificate.authority ]; then
 fi
 
 echo "Run the certificate management service..."
-docker container ls | grep -qw certauth
+docker container ls --format '{{.Names}}' | grep -qw certauth
 if [ $? -ne 0 ]; then
   docker run -d --restart always -p 80 --name certauth $CERTIFICATE_SERVER_IMAGE || exit 1
 fi
@@ -67,8 +67,9 @@ if [ ! -f /etc/docker/ca.pem ]; then
 	rm -f /etc/docker/client.csr
 fi
 
+should_wait_for_plugins=0
 echo "group" > $LOCAL_CONFIG/leader
-docker container ls | grep -qw infrakit
+docker container ls --format '{{.Names}}' | grep -qw infrakit
 if [ $? -ne 0 ]; then
     # cleanup
     rm -f $LOCAL_CONFIG/plugins/flavor-* $LOCAL_CONFIG/plugins/group*
@@ -78,10 +79,10 @@ if [ $? -ne 0 ]; then
            $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_IMAGE \
            infrakit plugin start --wait --config-url $PLUGINS_CFG --exec os --log 5 \
            manager group-stateless flavor-swarm flavor-vanilla flavor-combo
-           sleep 3
+           should_wait_for_plugins=1
 fi
 
-docker container ls | grep -qw instance-plugin
+docker container ls --format '{{.Names}}' | grep -qw instance-plugin
 if [ $? -ne 0 ]; then
     # cleanup
     rm -f $LOCAL_CONFIG/plugins/instance-aws*
@@ -89,9 +90,9 @@ if [ $? -ne 0 ]; then
     docker run -d --restart always --name instance-plugin \
            -v $LOCAL_CONFIG:/root/.infrakit $INFRAKIT_AWS_IMAGE \
            infrakit-instance-aws --log 5
-    echo "wait for plugins to be ready..."
-    sleep 5
+           should_wait_for_plugins=1
 fi
+if [ $should_wait_for_plugins -eq 1 ]; then echo "wait for plugins to be available..."; sleep 5; fi
 
 echo "prepare the InfraKit configuration file..."
 docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_IMAGE \
