@@ -38,6 +38,14 @@
           "Properties": {
             "Flavors": [
               {
+                "Plugin": "flavor-vanilla",
+                "Properties": {
+                  "Init": [
+                    "#!/bin/bash",
+                    "apt-get install -y awscli jq"
+                  ]
+                }
+              }, {
                 "Plugin": "flavor-swarm/manager",
                 "Properties": {
                   "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.sh",
@@ -100,21 +108,36 @@
           }
         },
         "Flavor": {
-          "Plugin": "flavor-swarm/worker",
+          "Plugin": "flavor-combo",
           "Properties": {
-            "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.sh",
-            "SwarmJoinIP": "{{ ref "/m1/ip" }}",
-            "Docker" : {
-              {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
-              "TLS" : {
-                "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
-                "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",
-                "KeyFile": "{{ ref "/docker/remoteapi/keyfile" }}",
-                "InsecureSkipVerify": false
+            "Flavors": [
+              {
+                "Plugin": "flavor-vanilla",
+                "Properties": {
+                  "Init": [
+                    "#!/bin/bash",
+                    "apt-get install -y awscli jq"
+                  ]
+                }
+              }, {
+                "Plugin": "flavor-swarm/worker",
+                "Properties": {
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.sh",
+                  "SwarmJoinIP": "{{ ref "/m1/ip" }}",
+                  "Docker" : {
+                    {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
+                    "TLS" : {
+                      "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
+                      "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",
+                      "KeyFile": "{{ ref "/docker/remoteapi/keyfile" }}",
+                      "InsecureSkipVerify": false
+                    }
+                    {{ else }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/port" }}"
+                    {{ end }}
+                  }
+                }
               }
-              {{ else }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/port" }}"
-              {{ end }}
-            }
+            ]
           }
         }
       }

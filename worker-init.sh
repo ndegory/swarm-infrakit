@@ -6,11 +6,11 @@ set -o xtrace
 {{ source "default.ikt" }}
 {{ source "file:///infrakit/env.ikt" }}
 {{ include "install-docker.sh" }}
+{{ source "attach-ebs-volume.sh" }}
 
-wget -qO- https://get.docker.com/ | sh
-usermod -G docker ubuntu
-systemctl enable docker.service
-systemctl start docker.service
+# Use an EBS volume for the devicemapper
+rm -rf /var/lib/docker
+_attach_ebs_volume /dev/sdn /var/lib/docker "Docker AUFS" {{ ref "/docker/aufs/size" }}
 
 mkdir -p /etc/docker
 cat << EOF > /etc/docker/daemon.json
@@ -21,9 +21,7 @@ EOF
 
 {{ if not ( eq 0 (len (ref "/certificate/ca/service"))) }}{{ include "request-certificate.sh" }}{{ end }}
 
-# Tell engine to reload labels
-kill -s HUP $(cat /var/run/docker.pid)
-
-sleep 5
+systemctl start docker.service
+sleep 2
 
 docker swarm join --token {{  SWARM_JOIN_TOKENS.Worker }} {{ SWARM_MANAGER_ADDR }}

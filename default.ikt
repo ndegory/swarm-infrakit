@@ -6,6 +6,7 @@
 {{ global "/docker/remoteapi/keyfile" "/etc/docker/client-key.pem" }}
 {{ global "/docker/remoteapi/srvcertfile" "/etc/docker/server.pem" }}
 {{ global "/docker/remoteapi/srvkeyfile" "/etc/docker/server-key.pem" }}
+{{ global "/docker/aufs/size" "20" }}
 {{ global "/amp/amplifier/image" "appcelerator/amplifier" }}
 {{ global "/amp/amplifier/version" "latest" }}
 {{ global "/amp/amplifier/replica" "3" }}

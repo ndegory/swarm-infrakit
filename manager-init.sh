@@ -6,6 +6,12 @@ set -o xtrace
 {{ source "default.ikt" }}
 {{ source "file:///infrakit/env.ikt" }}
 {{ include "install-docker.sh" }}
+{{ source "attach-ebs-volume.sh" }}
+
+# Use an EBS volume for the devicemapper
+systemctl stop docker.service
+rm -rf /var/lib/docker
+_attach_ebs_volume /dev/sdn /var/lib/docker "Docker AUFS" {{ ref "/docker/aufs/size" }}
 
 mkdir -p /etc/docker
 cat << EOF > /etc/docker/daemon.json
@@ -14,9 +20,8 @@ cat << EOF > /etc/docker/daemon.json
 }
 EOF
 
-{{/* Reload the engine labels */}}
-kill -s HUP $(cat /var/run/docker.pid)
-sleep 5
+systemctl start docker.service
+sleep 2
 
 {{ if not ( eq 0 (len (ref "/certificate/ca/service"))) }}{{ include "request-certificate.sh" }}{{ end }}
 

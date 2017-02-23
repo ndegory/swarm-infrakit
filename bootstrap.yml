@@ -44,6 +44,10 @@ Parameters:
     Description: Base URL for InfraKit configuration. there should be a bootstrap.sh, a variables.ikt and a config.tpl file
     Default: https://raw.githubusercontent.com/ndegory/swarm-infrakit/master
     AllowedPattern: "https?://[0-9a-z\\.-]+\\.[a-z\\.]{2,6}[/\\w\\.-]*/?"
+  AufsVolumeSize:
+    Type: Number
+    Description: Size in GB of the EBS volume for the Docker AUFS storage on each node
+    Default: 26
 
 Resources:
   Vpc:
@@ -233,7 +237,7 @@ Resources:
           Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ClusterRole}'
           Effect: Allow
         Version: '2012-10-17'
-      PolicyName: managers-policy
+      PolicyName: provisioner-policy
       Roles:
       - Ref: ProvisionerRole
   ProvisionerInstanceProfile:
@@ -255,6 +259,23 @@ Resources:
             - ec2.amazonaws.com
         Version: '2012-10-17'
       Path: /
+  ClusterPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+        - Action: 
+          - 'ec2:DescribeVolume*'
+          - 'ec2:AttachVolume'
+          - 'ec2:CreateVolume'
+          - 'ec2:CreateTags'
+          - 'ec2:ModifyInstanceAttribute'
+          Resource: '*'
+          Effect: Allow
+        Version: '2012-10-17'
+      PolicyName: cluster-policy
+      Roles:
+      - Ref: ClusterRole
   ClusterInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -316,6 +337,7 @@ Resources:
                     {{ global "/aws/instanceprofile" "${ClusterInstanceProfile}" }}
                     {{ global "/aws/keyname" "${KeyName}" }}
                     {{ global "/script/baseurl" "${InfraKitConfigurationBaseURL}" }}
+                    {{ global "/docker/aufs/size" "${AufsVolumeSize}" }}
               runcmd:
                 - wget -qO- https://get.docker.com/ | sh
                 - usermod -G docker ubuntu
@@ -337,6 +359,10 @@ Metadata:
         default: InfraKit Configuration
       Parameters:
       - InfraKitConfigurationBaseURL
+    - Label:
+        default: Docker Configuration
+      Parameters:
+      - AufsVolumeSize
     ParameterLabels:
       InstanceType:
         default: Agent worker instance type?
@@ -344,6 +370,8 @@ Metadata:
         default: Which SSH key to use?
       InfraKitConfigurationBaseURL:
         default: InfraKit configuration base URL
+      AufsVolumeSize:
+        default: EBS Volume Size
 
 Outputs:
   BootNodePublicIP:
