@@ -18,7 +18,7 @@ Coming soon
 
 #### Docker in Docker
 
-Coming soon
+bootstrap.sh -p docker
 
 ## Deploy
 

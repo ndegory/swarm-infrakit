@@ -2,107 +2,228 @@
 # @(#) starts infrakit and deploys the configuration
 # @(#) if no argument is provided, the configuration is expected to be in $PWD
 
-# Location of InfraKit templates
-InfraKitConfigurationBaseURL=$1
-# 
+
 INFRAKIT_HOME=/infrakit
-INFRAKIT_IMAGE=infrakit/devbundle:0.4.1
-INFRAKIT_AWS_IMAGE=infrakit/aws:0.4.1
+INFRAKIT_IMAGE_VERSION=0.4.1
+INFRAKIT_INFRAKIT_IMAGE=infrakit/devbundle:$INFRAKIT_IMAGE_VERSION
+INFRAKIT_AWS_IMAGE=infrakit/aws:$INFRAKIT_IMAGE_VERSION
+INFRAKIT_DOCKER_IMAGE=infrakit/docker:dev
 SSL_KEY_LENGTH=2048
 CERTIFICATE_SERVER_IMAGE=ndegory/certauth:latest
-
-docker pull $INFRAKIT_IMAGE || exit 1
-docker pull $INFRAKIT_AWS_IMAGE || exit 1
-
-# if a remote location is provided, the configuration will be searched there
-if [ -n "$InfraKitConfigurationBaseURL" ]; then
-  LOCAL_CONFIG=$INFRAKIT_HOME
-  CONFIG_TPL=$InfraKitConfigurationBaseURL/config.tpl
-  PLUGINS_CFG=$InfraKitConfigurationBaseURL/plugins.json
-else
-# or just use the local directory as the source
-  LOCAL_CONFIG=$PWD
-  CONFIG_TPL=file://$INFRAKIT_HOME/config.tpl
-  PLUGINS_CFG=file://$INFRAKIT_HOME/plugins.json
-fi
-mkdir -p $LOCAL_CONFIG/logs $LOCAL_CONFIG/plugins $LOCAL_CONFIG/configs || exit 1
-
+CERT_DIR=$HOME/.config/infrakit/certs
+LOCAL_CONFIG=$HOME/.config/infrakit/infrakit
 INFRAKIT_OPTIONS="-e INFRAKIT_HOME=$INFRAKIT_HOME -v $LOCAL_CONFIG:$INFRAKIT_HOME"
 INFRAKIT_PLUGINS_OPTIONS="-v /var/run/docker.sock:/var/run/docker.sock -e INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins"
 
-# get the local private IP, first with the AWS metadata service, and then a more standard way
-IP=$(curl -m 3 169.254.169.254/latest/meta-data/local-ipv4) || IP=$(ip a show dev eth0 | grep inet | grep eth0 | tail -1 | sed -e 's/^.*inet.//g' -e 's/\/.*$//g')
-if [ -z "$IP" ];then
-	echo "Unable to guess the private IP"
-	exit 1
-fi
+# pull docker images
+_pull_images() {
+  local _images="infrakit $@"
+  local _image
+  local i
+  for i in $_images; do
+    _image=$(eval echo \$INFRAKIT_$(echo $i | tr '[:lower:]' '[:upper:]')_IMAGE)
+    docker pull $_image
+    if [ $? -ne 0 ]; then
+      # fail back to locally generated image
+      docker image ls $_image > /dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        echo "no image with name $_image"
+        exit 1
+      fi
+    fi
+  done
+}
 
-if [ ! -d ~/certificate.authority ]; then
-	echo "Build a certificate management service..."
-	pushd ~/
-	git clone https://github.com/ndegory/certificate.authority.git
-	pushd certificate.authority 2>/dev/null
-	docker build -t $CERTIFICATE_SERVER_IMAGE . || exit 1
-	popd -1 2>/dev/null && popd 2>/dev/null
-fi
+# define and prepare the source directory
+_set_source() {
+  # Location of InfraKit templates
+  InfraKitConfigurationBaseURL=$1
+  mkdir -p $LOCAL_CONFIG || exit 1
+  # if a remote location is provided, the configuration will be searched there
+  if [ -n "$InfraKitConfigurationBaseURL" ]; then
+    CONFIG_TPL=$InfraKitConfigurationBaseURL/config.$provider.tpl
+    PLUGINS_CFG=$InfraKitConfigurationBaseURL/plugins.json
+  else
+  # or just use the local directory as the source
+    cp bootstrap* *.sh *.tpl plugins.json *.ikt $LOCAL_CONFIG/
+    CONFIG_TPL=file://$INFRAKIT_HOME/config.$provider.tpl
+    PLUGINS_CFG=file://$INFRAKIT_HOME/plugins.json
+  fi
+  mkdir -p $LOCAL_CONFIG/logs $LOCAL_CONFIG/plugins $LOCAL_CONFIG/configs || exit 1
+}
 
-echo "Run the certificate management service..."
-docker container ls --format '{{.Names}}' | grep -qw certauth
-if [ $? -ne 0 ]; then
-  docker run -d --restart always -p 80 --name certauth $CERTIFICATE_SERVER_IMAGE || exit 1
-fi
-CERTIFICATE_SERVER_PORT=$(docker inspect certauth --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}')
-echo "certificate server listening on port $CERTIFICATE_SERVER_PORT"
-echo "{{ global \"/certificate/ca/service\" \"$IP:$CERTIFICATE_SERVER_PORT\" }}" >> $LOCAL_CONFIG/env.ikt
+# run a certificate signing service
+_run_certificate_service() {
+  local IP
+  # get the local private IP, first with the AWS metadata service, and then a more standard way
+  IP=$(curl -m 3 169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null) || IP=$(ip a show dev eth0 | grep inet | grep eth0 | tail -1 | sed -e 's/^.*inet.//g' -e 's/\/.*$//g')
+  if [ -z "$IP" ];then
+    IP=$(ifconfig $(netstat -nr | awk 'NF==6 && $1 ~/default/ {print $6}' | tail -1) | awk '$1 == "inet" {print $2}')
+  fi
+  if [ -z "$IP" ];then
+    echo "Unable to guess the private IP"
+    exit 1
+  fi
 
-if [ ! -f /etc/docker/ca.pem ]; then
-        echo "Generate a self-signed CA..."
-        # (used by the Swarm flavor plugin)
-	curl localhost:$CERTIFICATE_SERVER_PORT/ca > /etc/docker/ca.pem
-        echo "Generate a certificate for the Docker client..."
-	openssl genrsa -out /etc/docker/client-key.pem $SSL_KEY_LENGTH
-	openssl req -subj '/CN=client' -new -key /etc/docker/client-key.pem -out /etc/docker/client.csr
-	curl --data "csr=$(cat /etc/docker/client.csr | sed 's/+/%2B/g');ext=extendedKeyUsage=clientAuth" localhost:$CERTIFICATE_SERVER_PORT/csr > /etc/docker/client.pem
-	ls -l /etc/docker/client.pem
-	rm -f /etc/docker/client.csr
-fi
+  if [ ! -d ~/certificate.authority ]; then
+    echo "Build a certificate management service..."
+    pushd ~/
+    git clone https://github.com/ndegory/certificate.authority.git
+    pushd certificate.authority 2>/dev/null
+    docker build -t $CERTIFICATE_SERVER_IMAGE . || exit 1
+    popd -1 2>/dev/null && popd 2>/dev/null
+  fi
+  echo "Run the certificate management service..."
+  docker container ls --format '{{.Names}}' | grep -qw certauth
+  if [ $? -ne 0 ]; then
+    docker run -d --restart always -p 80 --name certauth $CERTIFICATE_SERVER_IMAGE || exit 1
+  fi
+  CERTIFICATE_SERVER_PORT=$(docker inspect certauth --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}')
+  echo "certificate server listening on port $CERTIFICATE_SERVER_PORT"
+  #echo "{{ global \"/certificate/ca/service\" \"$IP:$CERTIFICATE_SERVER_PORT\" }}" >> $LOCAL_CONFIG/env.ikt
+}
 
-should_wait_for_plugins=0
-echo "group" > $LOCAL_CONFIG/leader
-docker container ls --format '{{.Names}}' | grep -qw infrakit
-if [ $? -ne 0 ]; then
+# generate a certificate for the Docker client
+_get_client_certificate() {
+  mkdir -p $CERT_DIR
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+  if [ ! -f $CERT_DIR/ca.pem ]; then
+    echo "Generate a self-signed CA..."
+    # (used by the Swarm flavor plugin)
+    curl localhost:$CERTIFICATE_SERVER_PORT/ca > $CERT_DIR/ca.pem
+    echo "Generate a certificate for the Docker client..."
+    openssl genrsa -out $CERT_DIR/client-key.pem $SSL_KEY_LENGTH
+    openssl req -subj '/CN=client' -new -key $CERT_DIR/client-key.pem -out $CERT_DIR/client.csr
+    curl --data "csr=$(cat $CERT_DIR/client.csr | sed 's/+/%2B/g');ext=extendedKeyUsage=clientAuth" localhost:$CERTIFICATE_SERVER_PORT/csr > $CERT_DIR/client.pem
+    ls -l $CERT_DIR/client.pem
+    rm -f $CERT_DIR/client.csr
+  fi
+}
+
+# run the infrakit containers
+# return 1 if a new container has been started
+_run_ikt() {
+  local _should_wait_for_plugins=0
+  echo "group" > $LOCAL_CONFIG/leader
+  docker container ls --format '{{.Names}}' | grep -qw infrakit
+  if [ $? -ne 0 ]; then
     # cleanup
     rm -f $LOCAL_CONFIG/plugins/flavor-* $LOCAL_CONFIG/plugins/group*
     echo "start InfraKit..."
     docker run -d --restart always --name infrakit \
-           -v /etc/docker:/etc/docker \
-           $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_IMAGE \
+           -v $CERT_DIR:/etc/docker \
+           $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
            infrakit plugin start --wait --config-url $PLUGINS_CFG --exec os --log 5 \
            manager group-stateless flavor-swarm flavor-vanilla flavor-combo
-           should_wait_for_plugins=1
-fi
+           _should_wait_for_plugins=1
+  fi
+  return $_should_wait_for_plugins
+}
 
-docker container ls --format '{{.Names}}' | grep -qw instance-plugin
-if [ $? -ne 0 ]; then
-    # cleanup
-    rm -f $LOCAL_CONFIG/plugins/instance-aws*
-    echo "start InfraKit AWS plugin..."
-    docker run -d --restart always --name instance-plugin \
-           $INFRAKIT_OPTIONS $INFRAKIT_AWS_IMAGE \
-           infrakit-instance-aws --log 5
-           should_wait_for_plugins=1
-fi
-if [ $should_wait_for_plugins -eq 1 ]; then echo "wait for plugins to be available..."; sleep 5; fi
+# run an infrakit plugin
+# return 1 if a new plugin has been started
+_run_ikt_plugin() {
+  local _should_wait_for_plugins=0
+  echo $@ | grep -q vagrant
+  if [ $? -eq 0 ]; then
+    # can't run in the container, start it with the binary
+    PATH=$PATH:$GOPATH/src/github.com/docker/infrakit/build
+    which infrakit-instance-vagrant 2>/dev/null
+    if [ $? -ne 0 ]; then
+      echo "can't find the infrakit-instance-vagrant binary, abort"
+      exit 1
+    fi
+    INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit-instance-vagrant --log 5 > $LOCAL_CONFIG/logs/instance-vagrant.log 2>&1
+    _should_wait_for_plugins=1
+  fi
+  local _plugin
+  local _image
+  for _plugin in $@; do
+    echo $_plugin | egrep -q "(aws)|(docker)"
+    if [ $? -eq 0 ]; then
+      docker container ls --format '{{.Names}}' | grep -qw instance-plugin-$_plugin
+      if [ $? -ne 0 ]; then
+        # cleanup
+        rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
+        _image=$(eval echo \${INFRAKIT_$(echo $_plugin | tr '[:lower:]' '[:upper:]')_IMAGE})
+        if [ -z "$_image" ]; then
+            echo "no image defined for plugin $_plugin"
+            exit 1
+        fi
+        echo "start InfraKit $_plugin plugin (image $_image)..."
+        docker run -d --restart always --name instance-plugin-$_plugin \
+             $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $_image \
+             infrakit-instance-$_plugin --log 5
+        if [ $? -ne 0 ]; then
+            echo "Unable to start the $_plugin plugin"
+            exit 1
+        fi
+        _should_wait_for_plugins=1
+      fi
+    fi
+  done
+  return $_should_wait_for_plugins
+}
 
-echo "prepare the InfraKit configuration file..."
-docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_IMAGE \
-           infrakit template --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
-if [ $? -ne 0 ]; then
-	echo "Failed"
-	exit 1
-fi
+# convert the template of the configuration file
+_prepare_config() {
+  echo "prepare the InfraKit configuration file..."
+  docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
+         infrakit template --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
+  if [ $? -ne 0 ]; then
+    echo "Failed, template URL was $CONFIG_TPL"
+    exit 1
+  fi
+}
 
-echo "deploy the configuration..."
-docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_IMAGE \
+# deploy the infrakit configuration
+_deploy_config() {
+  local INFRAKIT_OPTIONS="-e INFRAKIT_HOME=$INFRAKIT_HOME -v $LOCAL_CONFIG:$INFRAKIT_HOME"
+  local INFRAKIT_PLUGINS_OPTIONS="-v /var/run/docker.sock:/var/run/docker.sock -e INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins"
+  echo "deploy the configuration..."
+  docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
            infrakit manager commit file://$INFRAKIT_HOME/config.json
+}
+
+VALID_PROVIDERS="aws,docker,vagrant"
+provider=aws
+while getopts ":p:h" opt; do
+  case $opt in
+  p)
+      provider=""
+      echo "$VALID_PROVIDERS" | grep -wq "$OPTARG" && provider=$OPTARG
+      if [ -z "$provider" ]; then
+          echo "Valid providers are $VALID_PROVIDERS"
+          exit 1
+      fi
+      ;;
+  h)
+      echo "Usage: $(basename $0) [-p provider] [-h]"
+      exit 0
+      ;;
+  \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  :)
+      echo "Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
+  esac
+done
+shift "$((OPTIND-1))"
+
+_pull_images $provider
+_set_source $1
+_run_certificate_service
+_get_client_certificate
+_run_ikt
+started=$?
+_run_ikt_plugin $provider
+started=$((started + $?))
+if [ $started -gt 0 ]; then echo "waiting for plugins to be available..."; sleep 5; fi
+_prepare_config
+_deploy_config
 echo done

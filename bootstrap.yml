@@ -342,7 +342,7 @@ Resources:
                 - curl
                 - unzip
               write_files:
-                - path: /infrakit/env.ikt
+                - path: /root/.config/infrakit/infrakit/env.ikt
                   content: |
                     {{/* Global variables */}}
                     {{ global "/aws/region" "${region}" }}

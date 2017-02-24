@@ -4,7 +4,7 @@
   {
     "Plugin": "group",
     "Properties": {
-      "ID": "amp-manager-{{ ref "/aws/vpcid" }}",
+      "ID": "amp-manager",
       "Properties": {
         "Allocation": {
           "LogicalIds": [
@@ -14,23 +14,9 @@
           ]
         },
         "Instance": {
-          "Plugin": "instance-aws",
+          "Plugin": "instance-vagrant",
           "Properties": {
-            "RunInstancesInput": {
-              "ImageId": "{{ ref "/aws/amiid" }}",
-              "InstanceType": "{{ ref "/aws/instancetype" }}",
-              "KeyName": "{{ ref "/aws/keyname" }}",
-              "SubnetId": "{{ ref "/aws/subnetid" }}",
-              {{ if ref "/aws/instanceprofile" }}"IamInstanceProfile": {
-                "Name": "{{ ref "/aws/instanceprofile" }}"
-              },{{ end }}
-              "SecurityGroupIds": [ "{{ ref "/aws/securitygroupid" }}" ]
-            },
-            "Tags": {
-              "Name": "{{ ref "/aws/stackname" }}-manager",
-              "Deployment": "Infrakit",
-              "Role" : "manager"
-            }
+            "Box": "ubuntu/xenial64"
           }
         },
         "Flavor": {
@@ -51,7 +37,7 @@
                   "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.sh",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
-                    {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
+                    {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
                     "TLS" : {
                       "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
                       "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",
@@ -82,29 +68,15 @@
   {
     "Plugin": "group",
     "Properties": {
-      "ID": "amp-worker-{{ ref "/aws/vpcid" }}",
+      "ID": "amp-worker",
       "Properties": {
         "Allocation": {
           "Size": 2
         },
         "Instance": {
-          "Plugin": "instance-aws",
+          "Plugin": "instance-vagrant",
           "Properties": {
-            "RunInstancesInput": {
-              "ImageId": "{{ ref "/aws/amiid" }}",
-              "InstanceType": "{{ ref "/aws/instancetype" }}",
-              "KeyName": "{{ ref "/aws/keyname" }}",
-              "SubnetId": "{{ ref "/aws/subnetid" }}",
-              {{ if ref "/aws/instanceprofile" }}"IamInstanceProfile": {
-                "Name": "{{ ref "/aws/instanceprofile" }}"
-              },{{ end }}
-              "SecurityGroupIds": [ "{{ ref "/aws/securitygroupid" }}" ]
-            },
-            "Tags": {
-              "Name": "{{ ref "/aws/stackname" }}-worker",
-              "Deployment": "Infrakit",
-              "Role" : "worker"
-            }
+            "Box": "ubuntu/xenial64"
           }
         },
         "Flavor": {
@@ -125,7 +97,7 @@
                   "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.sh",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
-                    {{ if not (eq 0 (len (ref "/certificate/ca/service"))) }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
+                    {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
                     "TLS" : {
                       "CAFile": "{{ ref "/docker/remoteapi/cafile" }}",
                       "CertFile": "{{ ref "/docker/remoteapi/certfile" }}",

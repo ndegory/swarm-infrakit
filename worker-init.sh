@@ -7,11 +7,14 @@ set -o xtrace
 {{ source "file:///infrakit/env.ikt" }}
 {{ include "install-docker.sh" }}
 {{ source "attach-ebs-volume.sh" }}
+{{ source "provider.sh" }}
 
-# Use an EBS volume for the devicemapper
 systemctl stop docker.service
-rm -rf /var/lib/docker
-_attach_ebs_volume /dev/sdn /var/lib/docker "Docker AUFS" {{ ref "/docker/aufs/size" }}
+# Use an EBS volume for the devicemapper
+if [ "x$provider" = "xaws" ]; then
+  rm -rf /var/lib/docker
+  _attach_ebs_volume /dev/sdn /var/lib/docker "Docker AUFS" {{ ref "/docker/aufs/size" }}
+fi
 
 mkdir -p /etc/docker
 cat << EOF > /etc/docker/daemon.json
@@ -20,7 +23,7 @@ cat << EOF > /etc/docker/daemon.json
 }
 EOF
 
-{{ if not ( eq 0 (len (ref "/certificate/ca/service"))) }}{{ include "request-certificate.sh" }}{{ end }}
+{{ if ref "/certificate/ca/service" }}{{ include "request-certificate.sh" }}{{ end }}
 
 systemctl start docker.service
 sleep 2
