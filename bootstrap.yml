@@ -21,6 +21,19 @@ Mappings:
       cidr: 192.168.0.0/16
 
 Parameters:
+  BootstrapInstanceType:
+    Type: String
+    AllowedValues:
+    - t2.nano
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - t2.large
+    - m3.medium
+    - m4.large
+    ConstraintDescription: Must be a valid EC2 HVM instance type
+    Default: t2.micro
+    Description: EC2 HVM instance type (t2.micro, m3.medium, etc)
   InstanceType:
     Type: String
     AllowedValues:
@@ -33,6 +46,11 @@ Parameters:
     ConstraintDescription: Must be a valid EC2 HVM instance type
     Default: t2.micro
     Description: EC2 HVM instance type (t2.micro, m3.medium, etc)
+  BootstrapKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the bootstrap instances
+    MinLength: '1'
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: must be the name of an existing EC2 KeyPair
@@ -296,9 +314,9 @@ Resources:
         - AMI
         - Ref: AWS::Region
         - Ubuntu
-      InstanceType: !Ref InstanceType
+      InstanceType: !Ref BootstrapInstanceType
       PrivateIpAddress: "192.168.2.254"
-      KeyName: !Ref KeyName
+      KeyName: !Ref BootstrapKeyName
       Tags:
       - Key: Name
         Value:
@@ -353,6 +371,8 @@ Metadata:
     - Label:
         default: Cluster Properties
       Parameters:
+      - BootstrapInstanceType
+      - BootstrapKeyName
       - InstanceType
       - KeyName
     - Label:
@@ -364,10 +384,14 @@ Metadata:
       Parameters:
       - AufsVolumeSize
     ParameterLabels:
+      BootstrapInstanceType:
+        default: Bootstrap instance type
       InstanceType:
-        default: Agent worker instance type?
+        default: Cluster instances type
+      BootstrapKeyName:
+        default: Bootstrap instance SSH key
       KeyName:
-        default: Which SSH key to use?
+        default: Cluster instances SSH key
       InfraKitConfigurationBaseURL:
         default: InfraKit configuration base URL
       AufsVolumeSize:
