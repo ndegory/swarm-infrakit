@@ -9,6 +9,7 @@ set -o xtrace
 {{ source "attach-ebs-volume.sh" }}
 
 # Use an EBS volume for the devicemapper
+systemctl stop docker.service
 rm -rf /var/lib/docker
 _attach_ebs_volume /dev/sdn /var/lib/docker "Docker AUFS" {{ ref "/docker/aufs/size" }}
 
