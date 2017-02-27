@@ -6,8 +6,8 @@
 InfraKitConfigurationBaseURL=$1
 # 
 INFRAKIT_HOME=/infrakit
-INFRAKIT_IMAGE=infrakit/devbundle:dev
-INFRAKIT_AWS_IMAGE=infrakit/aws:dev
+INFRAKIT_IMAGE=infrakit/devbundle:0.4.1
+INFRAKIT_AWS_IMAGE=infrakit/aws:0.4.1
 SSL_KEY_LENGTH=2048
 CERTIFICATE_SERVER_IMAGE=ndegory/certauth:latest
 
@@ -88,7 +88,7 @@ if [ $? -ne 0 ]; then
     rm -f $LOCAL_CONFIG/plugins/instance-aws*
     echo "start InfraKit AWS plugin..."
     docker run -d --restart always --name instance-plugin \
-           -v $LOCAL_CONFIG:/root/.infrakit $INFRAKIT_AWS_IMAGE \
+           $INFRAKIT_OPTIONS $INFRAKIT_AWS_IMAGE \
            infrakit-instance-aws --log 5
            should_wait_for_plugins=1
 fi
