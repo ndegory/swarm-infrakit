@@ -48,7 +48,7 @@
               }, {
                 "Plugin": "flavor-swarm/manager",
                 "Properties": {
-                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.sh",
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.tpl",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
                     {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
@@ -122,7 +122,7 @@
               }, {
                 "Plugin": "flavor-swarm/worker",
                 "Properties": {
-                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.sh",
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.tpl",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
                     {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
