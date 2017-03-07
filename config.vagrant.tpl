@@ -53,9 +53,10 @@
                 "Properties": {
                   "Init": [
                     "set -o errexit",
-                    "docker network inspect {{ ref "/amp/network" }} 2>&1 | grep -q 'No such network'",
-                    "docker network create -d overlay --attachable {{ ref "/amp/network" }}",
-                    "docker service create --name amplifier --network {{ ref "/amp/network" }} {{ ref "/amp/amplifier/image" }}:{{ ref "/amp/amplifier/version" }}"
+                    "docker network inspect {{ ref "/amp/network" }} 2>&1 | grep -q 'No such network' && \\",
+                    "  docker network create -d overlay --attachable {{ ref "/amp/network" }}",
+                    "docker service ls {{ ref "/amp/network" }} 2>&1 | grep -q 'No such network' && \\",
+                    "docker service create --name amplifier --network {{ ref "/amp/network" }} {{ ref "/amp/amplifier/image" }}:{{ ref "/amp/amplifier/version" }} || true"
                   ]
                 }
               }
