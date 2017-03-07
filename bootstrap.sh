@@ -143,7 +143,7 @@ _get_client_certificate() {
 _run_ikt_container() {
   local _should_wait_for_plugins=0
   echo "group" > $LOCAL_CONFIG/leader
-  
+
   # remove old customized configuration just in case
   sed -i.bak 's/^{{ global "\/script\/baseurl"/#{{ global "\/script\/baseurl"/' $LOCAL_CONFIG/env.ikt
   docker container ls --format '{{.Names}}' | grep -qw infrakit
@@ -173,7 +173,7 @@ _run_ikt_container() {
 _run_ikt() {
   local _should_wait_for_plugins=0
   echo "group" > $LOCAL_CONFIG/leader
-  
+
   echo "{{ global \"/script/baseurl\" \"file://$LOCAL_CONFIG\" }}" >> $LOCAL_CONFIG/env.ikt
   echo "{{ global \"/docker/remoteapi/cafile\" \"$CERT_DIR/ca.pem\" }}" >> $LOCAL_CONFIG/env.ikt
   echo "{{ global \"/docker/remoteapi/certfile\" \"$CERT_DIR/client.pem\" }}" >> $LOCAL_CONFIG/env.ikt
@@ -186,7 +186,7 @@ _run_ikt() {
       _extra_plugins="$_extra_plugins instance-$_p"
       ;;
     esac
-  done 
+  done
   ps aux | grep -qw "[i]nfrakit plugin start"
   if [ $? -ne 0 ]; then
     # cleanup
@@ -472,7 +472,7 @@ else
     echo -n "waiting for plugins to be available..."
     rc=1
     while [ $rc -ne 0 ]; do
-      INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins infrakit instance --name=instance-$provider describe ls >/dev/null 2>&1
+      INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit instance --name=instance-$provider describe ls >/dev/null 2>&1
       rc=$?
       sleep 1
       echo -n "."

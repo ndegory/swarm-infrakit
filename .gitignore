@@ -2,6 +2,7 @@ infrakit-*/
 instance*.tf.json
 *.tfstate
 *.tfstate.backup
+*.tfvars
 *.lck
 backup/
 *.pem

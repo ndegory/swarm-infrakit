@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Docker Swarm cluster deployed with InfraKit 
+Description: Docker Swarm cluster deployed with InfraKit
 
 Mappings:
   AMI:
@@ -208,13 +208,13 @@ Resources:
     Properties:
       PolicyDocument:
         Statement:
-        - Action: 
+        - Action:
           - 'ec2:Describe*'
           - 'ec2:Get*'
           - 'ec2:CreateTags'
           Resource: '*'
           Effect: Allow
-        - Action: 
+        - Action:
           - 'ec2:RunInstances'
           - 'ec2:StartInstances'
           - 'ec2:StopInstances'
@@ -223,11 +223,11 @@ Resources:
           - 'ec2:AttachVolume'
           - 'ec2:DetachVolume'
           Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*'
-          Condition: 
+          Condition:
             StringEquals:
               "ec2:vpc": !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${Vpc}"
           Effect: Allow
-        - Action: 
+        - Action:
           - 'ec2:RunInstances'
           - 'ec2:StartInstances'
           - 'ec2:StopInstances'
@@ -236,11 +236,11 @@ Resources:
           - 'ec2:AttachVolume'
           - 'ec2:DetachVolume'
           Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-          Condition: 
+          Condition:
             StringEquals:
               "ec2:InstanceProfile": !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/${ClusterInstanceProfile}"
           Effect: Allow
-        - Action: 
+        - Action:
           - 'ec2:RunInstances'
           Resource:
           - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
@@ -250,7 +250,7 @@ Resources:
           - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/*'
           - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
           Effect: Allow
-        - Action: 
+        - Action:
           - 'iam:PassRole'
           Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ClusterRole}'
           Effect: Allow
@@ -282,7 +282,7 @@ Resources:
     Properties:
       PolicyDocument:
         Statement:
-        - Action: 
+        - Action:
           - 'ec2:DescribeVolume*'
           - 'ec2:AttachVolume'
           - 'ec2:CreateVolume'
