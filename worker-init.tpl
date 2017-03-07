@@ -5,11 +5,16 @@ set -o xtrace
 
 {{ source "default.ikt" }}
 {{ source "file:///infrakit/env.ikt" }}
-{{ include "install-docker.sh" }}
-{{ source "attach-ebs-volume.sh" }}
 {{ source "provider.sh" }}
+{{ source "attach-ebs-volume.sh" }}
+{{ source "install-docker.sh" }}
 
-systemctl stop docker.service
+# if we're already in a Docker container, either it's DinD and Docker is already installed
+# or it's a non DinD Docker container and we can't easily install Docker
+if [ "x$provider" != "xdocker" ]; then
+  _install_docker
+  systemctl stop docker.service
+fi
 # Use an EBS volume for the devicemapper
 if [ "x$provider" = "xaws" ]; then
   rm -rf /var/lib/docker
@@ -25,7 +30,9 @@ EOF
 
 {{ if ref "/certificate/ca/service" }}{{ include "request-certificate.sh" }}{{ end }}
 
-systemctl start docker.service
-sleep 2
+if [ "x$provider" != "xdocker" ]; then
+  systemctl start docker.service
+  sleep 2
+fi
 
 docker swarm join --token {{  SWARM_JOIN_TOKENS.Worker }} {{ SWARM_MANAGER_ADDR }}

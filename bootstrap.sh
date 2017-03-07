@@ -56,7 +56,7 @@ _set_source() {
 _run_certificate_service() {
   local IP
   # get the local private IP, first with the AWS metadata service, and then a more standard way
-  IP=$(curl -m 3 169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null) || IP=$(ip a show dev eth0 | grep inet | grep eth0 | tail -1 | sed -e 's/^.*inet.//g' -e 's/\/.*$//g')
+  IP=$(curl -m 3 169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null) || IP=$(ip a show dev eth0 2>/dev/null | grep inet | grep eth0 | tail -1 | sed -e 's/^.*inet.//g' -e 's/\/.*$//g')
   if [ -z "$IP" ];then
     IP=$(ifconfig $(netstat -nr | awk 'NF==6 && $1 ~/default/ {print $6}' | tail -1) | awk '$1 == "inet" {print $2}')
   fi
@@ -111,6 +111,11 @@ _run_ikt() {
   if [ $? -ne 0 ]; then
     # cleanup
     rm -f $LOCAL_CONFIG/plugins/flavor-* $LOCAL_CONFIG/plugins/group*
+    if [ "x$provider" = "xdocker" ]; then
+        local _network=hostnet
+        docker network create -d bridge --attachable $_network 2>/dev/null
+        INFRAKIT_OPTIONS="$INFRAKIT_OPTIONS --network $_network"
+    fi
     echo "start InfraKit..."
     docker run -d --restart always --name infrakit \
            -v $CERT_DIR:/etc/docker \
@@ -145,12 +150,16 @@ _run_ikt_plugin() {
     if [ $? -eq 0 ]; then
       docker container ls --format '{{.Names}}' | grep -qw instance-plugin-$_plugin
       if [ $? -ne 0 ]; then
-        # cleanup
+        # first, cleanup the pid and pipe files
         rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
         _image=$(eval echo \${INFRAKIT_$(echo $_plugin | tr '[:lower:]' '[:upper:]')_IMAGE})
         if [ -z "$_image" ]; then
             echo "no image defined for plugin $_plugin"
             exit 1
+        fi
+	if [ "$_plugin" = "docker" ]; then
+            local _network=hostnet
+            INFRAKIT_OPTIONS="$INFRAKIT_OPTIONS --network $_network"
         fi
         echo "start InfraKit $_plugin plugin (image $_image)..."
         docker run -d --restart always --name instance-plugin-$_plugin \
@@ -189,7 +198,8 @@ _deploy_config() {
 
 VALID_PROVIDERS="aws,docker,vagrant"
 provider=aws
-while getopts ":p:h" opt; do
+pull=1
+while getopts ":p:hf" opt; do
   case $opt in
   p)
       provider=""
@@ -203,6 +213,10 @@ while getopts ":p:h" opt; do
       echo "Usage: $(basename $0) [-p provider] [-h]"
       exit 0
       ;;
+  f)
+      # don't pull images
+      pull=0
+      ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -215,8 +229,11 @@ while getopts ":p:h" opt; do
 done
 shift "$((OPTIND-1))"
 
-_pull_images $provider
+if [ $pull -eq 1 ]; then
+  _pull_images $provider
+fi
 _set_source $1
+touch $LOCAL_CONFIG/env.ikt
 _run_certificate_service
 _get_client_certificate
 _run_ikt
