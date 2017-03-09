@@ -22,6 +22,9 @@ _pull_images() {
   local i
   for i in $_images; do
     _image=$(eval echo \$INFRAKIT_$(echo $i | tr '[:lower:]' '[:upper:]')_IMAGE)
+    if [ -z "$_image" ]; then
+      continue
+    fi
     docker pull $_image
     if [ $? -ne 0 ]; then
       # fail back to locally generated image
@@ -73,10 +76,12 @@ _run_certificate_service() {
     docker build -t $CERTIFICATE_SERVER_IMAGE . || exit 1
     popd -1 2>/dev/null && popd 2>/dev/null
   fi
-  echo "Run the certificate management service..."
   docker container ls --format '{{.Names}}' | grep -qw certauth
   if [ $? -ne 0 ]; then
+    echo "Run the certificate management service..."
     docker run -d --restart always -p 80 --name certauth $CERTIFICATE_SERVER_IMAGE || exit 1
+  else
+    echo "The certificate management service is already running"
   fi
   CERTIFICATE_SERVER_PORT=$(docker inspect certauth --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}')
   echo "certificate server listening on port $CERTIFICATE_SERVER_PORT"
@@ -116,13 +121,15 @@ _run_ikt() {
         docker network create -d bridge --attachable $_network 2>/dev/null
         INFRAKIT_OPTIONS="$INFRAKIT_OPTIONS --network $_network"
     fi
-    echo "start InfraKit..."
+    echo "Starting up InfraKit"
     docker run -d --restart always --name infrakit \
            -v $CERT_DIR:/etc/docker \
            $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
            infrakit plugin start --wait --config-url $PLUGINS_CFG --exec os --log 5 \
            manager group-stateless flavor-swarm flavor-vanilla flavor-combo
            _should_wait_for_plugins=1
+  else
+    echo "InfraKit container is already started"
   fi
   return $_should_wait_for_plugins
 }
@@ -131,26 +138,58 @@ _run_ikt() {
 # return 1 if a new plugin has been started
 _run_ikt_plugin() {
   local _should_wait_for_plugins=0
-  echo $@ | grep -q vagrant
-  if [ $? -eq 0 ]; then
-    # can't run in the container, start it with the binary
-    PATH=$PATH:$GOPATH/src/github.com/docker/infrakit/build
-    which infrakit-instance-vagrant 2>/dev/null
-    if [ $? -ne 0 ]; then
-      echo "can't find the infrakit-instance-vagrant binary, abort"
-      exit 1
-    fi
-    INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit-instance-vagrant --log 5 > $LOCAL_CONFIG/logs/instance-vagrant.log 2>&1
-    _should_wait_for_plugins=1
-  fi
+  local _exception_list="vagrant terraform"
   local _plugin
+  local _infrakit
+  local _binary
+  for _plugin in $_exception_list; do
+    echo $@ | grep -q $_plugin
+    if [ $? -eq 0 ]; then
+      # can't run in the container, start it with the binary
+      PATH=$PATH:$GOPATH/bin:$GOPATH/src/github.com/docker/infrakit/build
+      _binary=$(which infrakit-instance-$_plugin 2>/dev/null)
+      if [ -z "$_binary" ]; then
+        echo "can't find the infrakit-instance-$_plugin binary, abort"
+        exit 1
+      fi
+      _infrakit=$(which infrakit 2>/dev/null)
+      if [ -z "$_infrakit" ]; then
+        echo "can't find the infrakit binary, abort"
+        exit 1
+      fi
+      local _plugins_cfg=$PLUGINS_CFG
+      echo $PLUGINS_CFG | grep -q "file://" && _plugins_cfg="file://$LOCAL_CONFIG/plugins.json"
+      ps aux | grep -q [i]nfrakit-instance-$_plugin
+      if [ $? -ne 0 ]; then
+        # first, cleanup the pid and socket files
+        rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
+        #INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit-instance-$_plugin --log 5 > $LOCAL_CONFIG/logs/instance-$_plugin.log 2>&1 &
+        INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins ${_infrakit} plugin start --wait --config-url $_plugins_cfg --exec os --log 0 instance-$_plugin &
+        _should_wait_for_plugins=1
+        # we want the Docker container to be able to talk to the plugin, so fix the permission for that
+        local _rc=1
+        local _loop=0
+        while [ $_rc -ne 0 ]; do
+          chmod a+w $LOCAL_CONFIG/plugins/instance-${_plugin} 2>/dev/null
+          _rc=$?
+          if [ $((loop+1)) -gt 10 ]; then
+            echo "Failed to change the socket permission for plugin $_plugin"
+            break
+          fi
+          sleep 1
+        done
+      else
+        echo "$_plugin is already started"
+      fi
+    fi
+  done
   local _image
   for _plugin in $@; do
-    echo $_plugin | egrep -q "(aws)|(docker)"
-    if [ $? -eq 0 ]; then
+    echo $_exception_list | grep -qw $_plugin
+    if [ $? -ne 0 ]; then
       docker container ls --format '{{.Names}}' | grep -qw instance-plugin-$_plugin
       if [ $? -ne 0 ]; then
-        # first, cleanup the pid and pipe files
+        # first, cleanup the pid and socket files
         rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
         _image=$(eval echo \${INFRAKIT_$(echo $_plugin | tr '[:lower:]' '[:upper:]')_IMAGE})
         if [ -z "$_image" ]; then
@@ -161,7 +200,7 @@ _run_ikt_plugin() {
             local _network=hostnet
             INFRAKIT_OPTIONS="$INFRAKIT_OPTIONS --network $_network"
         fi
-        echo "start InfraKit $_plugin plugin (image $_image)..."
+        echo "Starting up InfraKit $_plugin plugin (image $_image)..."
         docker run -d --restart always --name instance-plugin-$_plugin \
              $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $_image \
              infrakit-instance-$_plugin --log 5
@@ -170,6 +209,8 @@ _run_ikt_plugin() {
             exit 1
         fi
         _should_wait_for_plugins=1
+      else
+        echo "$_plugin container is already running"
       fi
     fi
   done
