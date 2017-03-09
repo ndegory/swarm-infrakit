@@ -85,7 +85,7 @@ _run_certificate_service() {
   fi
   CERTIFICATE_SERVER_PORT=$(docker inspect certauth --format='{{(index (index .NetworkSettings.Ports "80/tcp") 0).HostPort}}')
   echo "certificate server listening on port $CERTIFICATE_SERVER_PORT"
-  #echo "{{ global \"/certificate/ca/service\" \"$IP:$CERTIFICATE_SERVER_PORT\" }}" >> $LOCAL_CONFIG/env.ikt
+  echo "{{ global \"/certificate/ca/service\" \"$IP:$CERTIFICATE_SERVER_PORT\" }}" >> $LOCAL_CONFIG/env.ikt
 }
 
 # generate a certificate for the Docker client
@@ -275,7 +275,7 @@ if [ $pull -eq 1 ]; then
 fi
 _set_source $1
 touch $LOCAL_CONFIG/env.ikt
-_run_certificate_service
+if [ "$provider" != "docker" ]; then _run_certificate_service; fi
 _get_client_certificate
 _run_ikt
 started=$?
