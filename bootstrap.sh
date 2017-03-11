@@ -55,6 +55,22 @@ _set_source() {
   mkdir -p $LOCAL_CONFIG/logs $LOCAL_CONFIG/plugins $LOCAL_CONFIG/configs || exit 1
 }
 
+# sets the number of managers and workers
+_set_size() {
+  local _size=$1
+  local _manager_size
+  local _worker_size
+  if [ $_size -gt 3 ]; then
+    _manager_size=3
+  else
+    _manager_size=1
+  fi
+  _worker_size=$((_size - _manager_size))
+  echo "$_manager_size managers and $_worker_size workers"
+  echo "{{ global \"/swarm/size/manager\" \"$_manager_size\" }}" >> $LOCAL_CONFIG/env.ikt
+  echo "{{ global \"/swarm/size/worker\" \"$_worker_size\" }}" >> $LOCAL_CONFIG/env.ikt
+}
+
 # run a certificate signing service
 _run_certificate_service() {
   local IP
@@ -240,8 +256,12 @@ _deploy_config() {
 VALID_PROVIDERS="aws,docker,vagrant"
 provider=aws
 pull=1
-while getopts ":p:hf" opt; do
+clustersize=5
+while getopts ":p:n:hf" opt; do
   case $opt in
+  n)
+      clustersize=$OPTARG
+      ;;
   p)
       provider=""
       echo "$VALID_PROVIDERS" | grep -wq "$OPTARG" && provider=$OPTARG
@@ -251,7 +271,7 @@ while getopts ":p:hf" opt; do
       fi
       ;;
   h)
-      echo "Usage: $(basename $0) [-p provider] [-h]"
+      echo "Usage: $(basename $0) [-p provider] [-n cluster size] [-f] [-h]"
       exit 0
       ;;
   f)
@@ -274,7 +294,7 @@ if [ $pull -eq 1 ]; then
   _pull_images $provider
 fi
 _set_source $1
-touch $LOCAL_CONFIG/env.ikt
+_set_size $clustersize
 if [ "$provider" != "docker" ]; then _run_certificate_service; fi
 _get_client_certificate
 _run_ikt
