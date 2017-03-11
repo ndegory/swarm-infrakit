@@ -1,5 +1,6 @@
 {{ source "default.ikt" }}
 {{ source "file:///infrakit/env.ikt" }}
+{ $workerSize := ref "/swarm/size/worker" }}
 [
   {
     "Plugin": "group",
@@ -86,7 +87,7 @@
       "ID": "amp-worker-{{ ref "/aws/vpcid" }}",
       "Properties": {
         "Allocation": {
-          "Size": 2
+          "Size": {{ $workerSize }}
         },
         "Instance": {
           "Plugin": "instance-aws",
