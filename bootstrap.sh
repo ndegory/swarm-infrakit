@@ -254,7 +254,7 @@ _deploy_config() {
 }
 
 VALID_PROVIDERS="aws,docker,vagrant"
-provider=aws
+provider=docker
 pull=1
 clustersize=5
 while getopts ":p:n:hf" opt; do
