@@ -168,10 +168,22 @@ _run_ikt_plugin() {
         echo "can't find the infrakit-instance-$_plugin binary, abort"
         exit 1
       fi
+      if [ ! -x "$_binary" ]; then
+        echo "the infrakit-instance-$_plugin binary is not executable, abort"
+        exit 1
+      fi
       _infrakit=$(which infrakit 2>/dev/null)
       if [ -z "$_infrakit" ]; then
         echo "can't find the infrakit binary, abort"
         exit 1
+      fi
+      if [ ! -x "$_infrakit" ]; then
+        echo "the infrakit binary is not executable, abort"
+        exit 1
+      fi
+      which $_plugin >/dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        echo "WARNING - can't find the $_plugin binary"
       fi
       local _plugins_cfg=$PLUGINS_CFG
       echo $PLUGINS_CFG | grep -q "file://" && _plugins_cfg="file://$LOCAL_CONFIG/plugins.json"
@@ -212,7 +224,7 @@ _run_ikt_plugin() {
             echo "no image defined for plugin $_plugin"
             exit 1
         fi
-	if [ "$_plugin" = "docker" ]; then
+        if [ "$_plugin" = "docker" ]; then
             local _network=hostnet
             INFRAKIT_OPTIONS="$INFRAKIT_OPTIONS --network $_network"
         fi
@@ -231,6 +243,32 @@ _run_ikt_plugin() {
     fi
   done
   return $_should_wait_for_plugins
+}
+
+# kill the infrakit container
+_kill_ikt() {
+  docker container rm -f infrakit >/dev/null 2>&1 && echo "infrakit container has been removed"
+}
+
+# kill the infrakit plugins (container or process)
+_kill_plugins() {
+  local _plugin
+  for _plugin in $VALID_PROVIDERS; do
+    docker container rm -f instance-$_plugin 2>/dev/null || killall infrakit-instance-$_plugin 2>/dev/null && echo "$_plugin has been stopped"
+  done
+  killall infrakit 2>/dev/null
+}
+
+# removes the configuration files
+_clean_config() {
+  if [ -f $LOCAL_CONFIG/config.json ]; then
+    rm -f $LOCAL_CONFIG/config.json
+    echo "config.json has been removed"
+  fi
+  if [ -f $LOCAL_CONFIG/env.ikt ]; then
+    rm -f $LOCAL_CONFIG/env.ikt
+    echo "env.ikt has been removed"
+  fi
 }
 
 # convert the template of the configuration file
@@ -253,11 +291,12 @@ _deploy_config() {
            infrakit manager commit file://$INFRAKIT_HOME/config.json
 }
 
-VALID_PROVIDERS="aws,docker,vagrant"
+VALID_PROVIDERS="aws docker terraform vagrant"
 provider=docker
 pull=1
 clustersize=5
-while getopts ":p:n:hf" opt; do
+clean=0
+while getopts ":p:n:hfc" opt; do
   case $opt in
   n)
       clustersize=$OPTARG
@@ -278,6 +317,9 @@ while getopts ":p:n:hf" opt; do
       # don't pull images
       pull=0
       ;;
+  c)
+      clean=1
+      ;;
   \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -290,6 +332,12 @@ while getopts ":p:n:hf" opt; do
 done
 shift "$((OPTIND-1))"
 
+if [ $clean -eq 1 ]; then
+  _kill_plugins
+  _kill_ikt
+  _clean_config
+  exit
+fi
 if [ $pull -eq 1 ]; then
   _pull_images $provider
 fi
