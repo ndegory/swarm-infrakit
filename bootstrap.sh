@@ -10,8 +10,8 @@ INFRAKIT_AWS_IMAGE=infrakit/aws:$INFRAKIT_IMAGE_VERSION
 INFRAKIT_DOCKER_IMAGE=infrakit/docker:dev
 SSL_KEY_LENGTH=2048
 CERTIFICATE_SERVER_IMAGE=ndegory/certauth:latest
-CERT_DIR=$HOME/.config/infrakit/certs
-LOCAL_CONFIG=$HOME/.config/infrakit/infrakit
+CERT_DIR=~/.config/infrakit/certs
+LOCAL_CONFIG=~/.config/infrakit/infrakit
 INFRAKIT_OPTIONS="-e INFRAKIT_HOME=$INFRAKIT_HOME -v $LOCAL_CONFIG:$INFRAKIT_HOME"
 INFRAKIT_PLUGINS_OPTIONS="-v /var/run/docker.sock:/var/run/docker.sock -e INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins"
 
