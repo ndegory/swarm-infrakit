@@ -274,8 +274,7 @@ _clean_config() {
 # convert the template of the configuration file
 _prepare_config() {
   echo "prepare the InfraKit configuration file..."
-  docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
-         infrakit template --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
+  docker exec infrakit infrakit template --log 5 --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
   if [ $? -ne 0 ]; then
     echo "Failed, template URL was $CONFIG_TPL"
     exit 1
@@ -284,11 +283,8 @@ _prepare_config() {
 
 # deploy the infrakit configuration
 _deploy_config() {
-  local INFRAKIT_OPTIONS="-e INFRAKIT_HOME=$INFRAKIT_HOME -v $LOCAL_CONFIG:$INFRAKIT_HOME"
-  local INFRAKIT_PLUGINS_OPTIONS="-v /var/run/docker.sock:/var/run/docker.sock -e INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins"
   echo "deploy the configuration..."
-  docker run --rm $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
-           infrakit manager commit file://$INFRAKIT_HOME/config.json
+  docker exec infrakit infrakit manager commit file://$INFRAKIT_HOME/config.json
 }
 
 VALID_PROVIDERS="aws docker terraform vagrant"
