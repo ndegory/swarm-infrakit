@@ -1,6 +1,6 @@
 {{ source "default.ikt" }}
 {{ source "file:///infrakit/env.ikt" }}
-{ $workerSize := ref "/swarm/size/worker" }}
+{{ $workerSize := ref "/swarm/size/worker" }}
 [
   {
     "Plugin": "group",
