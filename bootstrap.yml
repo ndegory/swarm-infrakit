@@ -362,7 +362,7 @@ Resources:
                 - systemctl enable docker.service
                 - systemctl start docker.service
                 - curl ${InfraKitConfigurationBaseURL}/bootstrap.sh -o /usr/local/bin/bootstrap.sh
-                - bash /usr/local/bin/bootstrap.sh ${InfraKitConfigurationBaseURL}
+                - bash /usr/local/bin/bootstrap.sh -p aws ${InfraKitConfigurationBaseURL}
             - { ami: !FindInMap [ AMI, !Ref "AWS::Region", Ubuntu ], stackname: !Ref "AWS::StackName", region: !Ref "AWS::Region" }
 
 Metadata:
