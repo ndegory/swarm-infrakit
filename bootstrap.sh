@@ -245,6 +245,19 @@ _run_ikt_plugin() {
   return $_should_wait_for_plugins
 }
 
+# destroy the instances managed by infrakit
+_destroy_groups() {
+  local _groups
+  local _group
+  _groups=$(docker exec infrakit infrakit group ls 2>/dev/null | tail -n +2)
+  for _group in $_groups; do
+    grep -q "\"$_group\"" $LOCAL_CONFIG/config.json
+    if [ $? -eq 0 ]; then
+      docker exec infrakit infrakit group destroy $_group
+    fi
+  done
+}
+
 # kill the infrakit container
 _kill_ikt() {
   docker container rm -f infrakit >/dev/null 2>&1 && echo "infrakit container has been removed"
@@ -254,7 +267,7 @@ _kill_ikt() {
 _kill_plugins() {
   local _plugin
   for _plugin in $VALID_PROVIDERS; do
-    docker container rm -f instance-$_plugin 2>/dev/null || killall infrakit-instance-$_plugin 2>/dev/null && echo "$_plugin has been stopped"
+    docker container rm -f instance-plugin-$_plugin 2>/dev/null || killall infrakit-instance-$_plugin 2>/dev/null && echo "$_plugin plugin has been stopped"
   done
   killall infrakit 2>/dev/null
 }
@@ -329,6 +342,7 @@ done
 shift "$((OPTIND-1))"
 
 if [ $clean -eq 1 ]; then
+  _destroy_groups
   _kill_plugins
   _kill_ikt
   _clean_config
