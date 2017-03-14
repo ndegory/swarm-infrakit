@@ -15,6 +15,16 @@ LOCAL_CONFIG=~/.config/infrakit/infrakit
 INFRAKIT_OPTIONS="-e INFRAKIT_HOME=$INFRAKIT_HOME -v $LOCAL_CONFIG:$INFRAKIT_HOME"
 INFRAKIT_PLUGINS_OPTIONS="-v /var/run/docker.sock:/var/run/docker.sock -e INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins"
 
+# check if it can be run with containers
+_run_in_container() {
+  local _provider=$1
+  if [ -n "$_provider" ] && echo $NON_CONTAINERIZED_PLUGINS | grep -qw $_provider; then
+    return 1
+  else
+    return 0
+  fi
+}
+
 # pull docker images
 _pull_images() {
   local _images="infrakit $@"
@@ -46,11 +56,16 @@ _set_source() {
   if [ -n "$InfraKitConfigurationBaseURL" ]; then
     CONFIG_TPL=$InfraKitConfigurationBaseURL/config.$provider.tpl
     PLUGINS_CFG=$InfraKitConfigurationBaseURL/plugins.json
+    CONTAINER_CONFIG_TPL=$CONFIG_TPL
+    CONTAINER_PLUGINS_CFG=$PLUGINS_CFG
   else
-  # or just use the local directory as the source
+    # or just use the local directory as the source
+    echo "copying source files locally"
     cp bootstrap* *.sh *.tpl plugins.json *.ikt $LOCAL_CONFIG/
-    CONFIG_TPL=file://$INFRAKIT_HOME/config.$provider.tpl
-    PLUGINS_CFG=file://$INFRAKIT_HOME/plugins.json
+    CONFIG_TPL=file://$LOCAL_CONFIG/config.$provider.tpl
+    PLUGINS_CFG=file://$LOCAL_CONFIG/plugins.json
+    CONTAINER_CONFIG_TPL=file://$INFRAKIT_HOME/config.$provider.tpl
+    CONTAINER_PLUGINS_CFG=file://$INFRAKIT_HOME/plugins.json
   fi
   mkdir -p $LOCAL_CONFIG/logs $LOCAL_CONFIG/plugins $LOCAL_CONFIG/configs || exit 1
 }
@@ -125,9 +140,12 @@ _get_client_certificate() {
 
 # run the infrakit containers
 # return 1 if a new container has been started
-_run_ikt() {
+_run_ikt_container() {
   local _should_wait_for_plugins=0
   echo "group" > $LOCAL_CONFIG/leader
+  
+  # remove old customized configuration just in case
+  sed -i.bak 's/^{{ global "\/script\/baseurl"/#{{ global "\/script\/baseurl"/' $LOCAL_CONFIG/env.ikt
   docker container ls --format '{{.Names}}' | grep -qw infrakit
   if [ $? -ne 0 ]; then
     # cleanup
@@ -139,81 +157,58 @@ _run_ikt() {
     fi
     echo "Starting up InfraKit"
     docker run -d --restart always --name infrakit \
-           -v $CERT_DIR:/etc/docker \
-           $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
-           infrakit plugin start --wait --config-url $PLUGINS_CFG --exec os --log 5 \
-           manager group-stateless flavor-swarm flavor-vanilla flavor-combo
-           _should_wait_for_plugins=1
+         -v $CERT_DIR:/etc/docker \
+         $INFRAKIT_OPTIONS $INFRAKIT_PLUGINS_OPTIONS $INFRAKIT_INFRAKIT_IMAGE \
+         infrakit plugin start --wait --config-url $CONTAINER_PLUGINS_CFG --exec os --log 5 \
+         manager group-stateless flavor-swarm flavor-vanilla flavor-combo
+    _should_wait_for_plugins=1
   else
     echo "InfraKit container is already started"
   fi
   return $_should_wait_for_plugins
 }
 
-# run an infrakit plugin
-# return 1 if a new plugin has been started
-_run_ikt_plugin() {
+# run the infrakit binary
+# return 1 if a new process has been started
+_run_ikt() {
   local _should_wait_for_plugins=0
-  local _exception_list="vagrant terraform"
+  echo "group" > $LOCAL_CONFIG/leader
+  
+  echo "{{ global \"/script/baseurl\" \"file://$LOCAL_CONFIG\" }}" >> $LOCAL_CONFIG/env.ikt
+  echo "{{ global \"/docker/remoteapi/cafile\" \"$CERT_DIR/ca.pem\" }}" >> $LOCAL_CONFIG/env.ikt
+  echo "{{ global \"/docker/remoteapi/certfile\" \"$CERT_DIR/client.pem\" }}" >> $LOCAL_CONFIG/env.ikt
+  echo "{{ global \"/docker/remoteapi/keyfile\" \"$CERT_DIR/client-key.pem\" }}" >> $LOCAL_CONFIG/env.ikt
+  local _extra_plugins=""
+  local _p
+  for _p in $@; do
+    case $_p in
+    vagrant|terraform)
+      _extra_plugins="$_extra_plugins instance-$_p"
+      ;;
+    esac
+  done 
+  ps aux | grep -qw "[i]nfrakit plugin start"
+  if [ $? -ne 0 ]; then
+    # cleanup
+    rm -f $LOCAL_CONFIG/plugins/flavor-* $LOCAL_CONFIG/plugins/group*
+    INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins INFRAKIT_HOME=$LOCAL_CONFIG infrakit plugin start --wait \
+         --config-url $PLUGINS_CFG --exec os --log 5 \
+         manager group-stateless flavor-swarm flavor-vanilla flavor-combo $_extra_plugins 2>/dev/null &
+    _should_wait_for_plugins=1
+  else
+    echo "InfraKit is already started"
+  fi
+  return $_should_wait_for_plugins
+}
+
+# run an infrakit plugin as a container
+# return 1 if a new plugin has been started
+_run_ikt_plugin_container() {
+  local _should_wait_for_plugins=0
   local _plugin
-  local _infrakit
-  local _binary
-  for _plugin in $_exception_list; do
-    echo $@ | grep -q $_plugin
-    if [ $? -eq 0 ]; then
-      # can't run in the container, start it with the binary
-      PATH=$PATH:$GOPATH/bin:$GOPATH/src/github.com/docker/infrakit/build
-      _binary=$(which infrakit-instance-$_plugin 2>/dev/null)
-      if [ -z "$_binary" ]; then
-        echo "can't find the infrakit-instance-$_plugin binary, abort"
-        exit 1
-      fi
-      if [ ! -x "$_binary" ]; then
-        echo "the infrakit-instance-$_plugin binary is not executable, abort"
-        exit 1
-      fi
-      _infrakit=$(which infrakit 2>/dev/null)
-      if [ -z "$_infrakit" ]; then
-        echo "can't find the infrakit binary, abort"
-        exit 1
-      fi
-      if [ ! -x "$_infrakit" ]; then
-        echo "the infrakit binary is not executable, abort"
-        exit 1
-      fi
-      which $_plugin >/dev/null 2>&1
-      if [ $? -ne 0 ]; then
-        echo "WARNING - can't find the $_plugin binary"
-      fi
-      local _plugins_cfg=$PLUGINS_CFG
-      echo $PLUGINS_CFG | grep -q "file://" && _plugins_cfg="file://$LOCAL_CONFIG/plugins.json"
-      ps aux | grep -q [i]nfrakit-instance-$_plugin
-      if [ $? -ne 0 ]; then
-        # first, cleanup the pid and socket files
-        rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
-        #INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit-instance-$_plugin --log 5 > $LOCAL_CONFIG/logs/instance-$_plugin.log 2>&1 &
-        INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins ${_infrakit} plugin start --wait --config-url $_plugins_cfg --exec os --log 0 instance-$_plugin &
-        _should_wait_for_plugins=1
-        # we want the Docker container to be able to talk to the plugin, so fix the permission for that
-        local _rc=1
-        local _loop=0
-        while [ $_rc -ne 0 ]; do
-          chmod a+w $LOCAL_CONFIG/plugins/instance-${_plugin} 2>/dev/null
-          _rc=$?
-          if [ $((loop+1)) -gt 10 ]; then
-            echo "Failed to change the socket permission for plugin $_plugin"
-            break
-          fi
-          sleep 1
-        done
-      else
-        echo "$_plugin is already started"
-      fi
-    fi
-  done
   local _image
   for _plugin in $@; do
-    echo $_exception_list | grep -qw $_plugin
+    echo $NON_CONTAINERIZED_PLUGINS | grep -qw $_plugin
     if [ $? -ne 0 ]; then
       docker container ls --format '{{.Names}}' | grep -qw instance-plugin-$_plugin
       if [ $? -ne 0 ]; then
@@ -245,6 +240,67 @@ _run_ikt_plugin() {
   return $_should_wait_for_plugins
 }
 
+# run an infrakit plugin
+# return 1 if a new plugin has been started
+_run_ikt_plugin() {
+  local _should_wait_for_plugins=0
+  local _plugin
+  local _infrakit
+  local _binary
+  for _plugin in $NON_CONTAINERIZED_PLUGINS; do
+    echo $@ | grep -q $_plugin
+    if [ $? -eq 0 ]; then
+      # can't run in the container, start it with the binary
+      PATH=$PATH:$GOPATH/bin:$GOPATH/src/github.com/docker/infrakit/build
+      _binary=$(which infrakit-instance-$_plugin 2>/dev/null)
+      if [ -z "$_binary" ]; then
+        echo "can't find the infrakit-instance-$_plugin binary, abort"
+        exit 1
+      fi
+      if [ ! -x "$_binary" ]; then
+        echo "the infrakit-instance-$_plugin binary is not executable, abort"
+        exit 1
+      fi
+      _infrakit=$(which infrakit 2>/dev/null)
+      if [ -z "$_infrakit" ]; then
+        echo "can't find the infrakit binary, abort"
+        exit 1
+      fi
+      if [ ! -x "$_infrakit" ]; then
+        echo "the infrakit binary is not executable, abort"
+        exit 1
+      fi
+      which $_plugin >/dev/null 2>&1
+      if [ $? -ne 0 ]; then
+        echo "WARNING - can't find the $_plugin binary"
+      fi
+      ps aux | grep -q [i]nfrakit-instance-$_plugin
+      if [ $? -ne 0 ]; then
+        # first, cleanup the pid and socket files
+        rm -f $LOCAL_CONFIG/plugins/instance-${_plugin}*
+        #INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit-instance-$_plugin --log 5 > $LOCAL_CONFIG/logs/instance-$_plugin.log 2>&1 &
+        INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins ${_infrakit} plugin start --wait --config-url $PLUGINS_CFG --exec os --log 0 instance-$_plugin &
+        _should_wait_for_plugins=1
+        # we want the Docker container to be able to talk to the plugin, so fix the permission for that
+        local _rc=1
+        local _loop=0
+        while [ $_rc -ne 0 ]; do
+          chmod a+w $LOCAL_CONFIG/plugins/instance-${_plugin} 2>/dev/null
+          _rc=$?
+          if [ $((loop+1)) -gt 10 ]; then
+            echo "Failed to change the socket permission for plugin $_plugin"
+            break
+          fi
+          sleep 1
+        done
+      else
+        echo "$_plugin is already started"
+      fi
+    fi
+  done
+  return $_should_wait_for_plugins
+}
+
 # destroy the instances managed by infrakit
 _destroy_groups() {
   local _groups
@@ -260,7 +316,8 @@ _destroy_groups() {
 
 # kill the infrakit container
 _kill_ikt() {
-  docker container rm -f infrakit >/dev/null 2>&1 && echo "infrakit container has been removed"
+  docker container rm -f infrakit >/dev/null 2>&1 || killall infrakit 2>/dev/null && echo "infrakit container has been removed"
+  killall infrakit-flavor-combo infrakit-flavor-swarm infrakit-flavor-vanilla infrakit-group-default infrakit-manager
 }
 
 # kill the infrakit plugins (container or process)
@@ -282,12 +339,29 @@ _clean_config() {
     rm -f $LOCAL_CONFIG/env.ikt
     echo "env.ikt has been removed"
   fi
+  if [ -d $LOCAL_CONFIG/configs ]; then
+    rm -rf $LOCAL_CONFIG/configs
+    echo "configs folder has been removed"
+  fi
+  if [ -d $CERT_DIR ]; then
+    rm -f $CERT_DIR/ca.pem $CERT_DIR/client.pem $CERT_DIR/client-key.pem
+    echo "client certificates have been removed"
+  fi
 }
 
 # convert the template of the configuration file
-_prepare_config() {
+_prepare_config_container() {
   echo "prepare the InfraKit configuration file..."
-  docker exec infrakit infrakit template --log 5 --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
+  docker exec infrakit infrakit template --log 5 --url $CONTAINER_CONFIG_TPL > $LOCAL_CONFIG/config.json
+  if [ $? -ne 0 ]; then
+    echo "Failed, template URL was $CONTAINER_CONFIG_TPL"
+    exit 1
+  fi
+}
+# convert the template of the configuration file
+_prepare_config() {
+  echo "prepare the InfraKit configuration file (not dockerized)..."
+  infrakit template --log 5 --url $CONFIG_TPL > $LOCAL_CONFIG/config.json
   if [ $? -ne 0 ]; then
     echo "Failed, template URL was $CONFIG_TPL"
     exit 1
@@ -295,14 +369,32 @@ _prepare_config() {
 }
 
 # deploy the infrakit configuration
-_deploy_config() {
+_deploy_config_container() {
   echo "deploy the configuration..."
   docker exec infrakit infrakit manager commit file://$INFRAKIT_HOME/config.json
 }
+# deploy the infrakit configuration
+_deploy_config() {
+  echo "deploy the configuration (not dockerized)..."
+  # hack for non containerized deployments, the source file:///infrakit/env.ikt would fail
+  local _group
+  for _group in manager worker; do
+    if [ -f $LOCAL_CONFIG/${_group}-init.tpl ]; then
+      echo "hacking the $_group template"
+      cp $LOCAL_CONFIG/${_group}-init.tpl $LOCAL_CONFIG/${_group}-init.$provider.tpl
+      sed -i.bak "s%file:///infrakit/env.ikt%file://$LOCAL_CONFIG/env.ikt%" $LOCAL_CONFIG/${_group}-init.$provider.tpl
+    fi
+  done
+  INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$LOCAL_CONFIG/plugins infrakit manager commit file://$LOCAL_CONFIG/config.json
+}
 
 VALID_PROVIDERS="aws docker terraform vagrant"
+# we can't run InfraKit in a container for these plugins
+NON_CONTAINERIZED_PLUGINS="vagrant terraform"
+# providers managed by infrakit (integrated plugin)
+MANAGED_PLUGINS="vagrant terraform"
 provider=docker
-pull=1
+should_pull=1
 clustersize=5
 clean=0
 while getopts ":p:n:hfc" opt; do
@@ -324,7 +416,7 @@ while getopts ":p:n:hfc" opt; do
       ;;
   f)
       # don't pull images
-      pull=0
+      should_pull=0
       ;;
   c)
       clean=1
@@ -348,18 +440,47 @@ if [ $clean -eq 1 ]; then
   _clean_config
   exit
 fi
-if [ $pull -eq 1 ]; then
-  _pull_images $provider
-fi
 _set_source $1
 _set_size $clustersize
 if [ "$provider" != "docker" ]; then _run_certificate_service; fi
 _get_client_certificate
-_run_ikt
-started=$?
-_run_ikt_plugin $provider
-started=$((started + $?))
-if [ $started -gt 0 ]; then echo "waiting for plugins to be available..."; sleep 5; fi
-_prepare_config
-_deploy_config
+if $(_run_in_container $provider); then
+  if [ $should_pull -eq 1 ]; then _pull_images $provider; fi
+  _run_ikt_container $provider
+  started=$?
+  _run_ikt_plugin_container $provider
+  started=$((started + $?))
+  if [ $started -gt 0 ]; then
+    echo -n "waiting for plugins to be available..."
+    rc=1
+    while [ $rc -ne 0 ]; do
+      docker exec infrakit infrakit instance --name=instance-$provider describe ls >/dev/null 2>&1
+      rc=$?
+      sleep 1
+      echo -n "."
+    done
+    echo
+    sleep 3
+  fi
+  _prepare_config_container
+  _deploy_config_container
+else
+  echo "Warning: can't run InfraKit in a container with $provider"
+  _run_ikt $provider
+  started=$?
+  if [ $started -gt 0 ]; then
+    echo -n "waiting for plugins to be available..."
+    rc=1
+    while [ $rc -ne 0 ]; do
+      INFRAKIT_HOME=$LOCAL_CONFIG INFRAKIT_PLUGINS_DIR=$INFRAKIT_HOME/plugins infrakit instance --name=instance-$provider describe ls >/dev/null 2>&1
+      rc=$?
+      sleep 1
+      echo -n "."
+    done
+    echo
+    sleep 3
+  fi
+  _prepare_config
+  _deploy_config
+fi
 echo done

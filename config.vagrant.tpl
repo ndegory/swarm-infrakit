@@ -1,5 +1,5 @@
 {{ source "default.ikt" }}
-{{ source "file:///infrakit/env.ikt" }}
+{{ source "env.ikt" }}
 {{ $workerSize := ref "/swarm/size/worker" }}
 [
   {
@@ -35,7 +35,7 @@
               }, {
                 "Plugin": "flavor-swarm/manager",
                 "Properties": {
-                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.tpl",
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/manager-init.vagrant.tpl",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
                     {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
@@ -96,7 +96,7 @@
               }, {
                 "Plugin": "flavor-swarm/worker",
                 "Properties": {
-                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.tpl",
+                  "InitScriptTemplateURL": "{{ ref "/script/baseurl" }}/worker-init.vagrant.tpl",
                   "SwarmJoinIP": "{{ ref "/m1/ip" }}",
                   "Docker" : {
                     {{ if ref "/certificate/ca/service" }}"Host" : "tcp://{{ ref "/m1/ip" }}:{{ ref "/docker/remoteapi/tlsport" }}",
