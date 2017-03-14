@@ -38,7 +38,7 @@ fi
 
 # INSTANCE_LOGICAL_ID can be an IP of a hostname, we need an IP
 IP="{{ INSTANCE_LOGICAL_ID }}"
-if [ ! $(echo "$IP" | egrep -q "([0-9.]+){4}") ]; then
+if ! $(echo "$IP" | egrep -q "([0-9.]+){4}"); then
   IP=$(nslookup {{ INSTANCE_LOGICAL_ID }}  2>/dev/null | awk '$1 == "Address" {print $3}' | tail -1)
 fi
 
